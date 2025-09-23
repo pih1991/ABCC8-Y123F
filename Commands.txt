@@ -1,0 +1,67 @@
+colabfold_batch my.fasta --num-recycle 24 --num-seeds 16 --use-dropout --max-msa 32:64 --amber --calc-extra-ptm
+mpirun -np 8gmx_MMPBSA -O -i p-m.in -cs md.tpr -ct md_centered.xtc -ci wild.ndx -cg 17 18 -cp topol.top -cr best.pdb -o wildo.dat -eo wildeo.csv -do wilddo.dat -deo wilddeo.csv
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -s relax.pdb -parser:protocol predict_probs.xml -auto_download -out:file:score_only score.sc
+python run_example_2_saturation.py && python analyze_flex_ddG.py output_saturation
+spanfile_from_pdb.linuxgccrelease -database /path/to/db -in:file:s example_inputs/3pxo_tr.pdb
+rosetta_scripts.linuxgccrelease -database /path/to/db @relax_flags
+python predict_ddG.py --in_pdb my.pdb --in_span my.span --res 100 --repack_radius 8.0
+----------------------
+MD run
+gmx pdb2gmx -f 1.pdb -o 2.pdb -ignh
+gmx editconf -f 2.pdb -bt triclinic -d 1.0 -c -o 3.pdb
+gmx solvate -cp 3.pdb  -p topol.top -o 4.pdb
+gmx grompp -f ions.mdp -c 4.pdb -p topol.top -o ions.tpr
+gmx genion -s ions.tpr -o 5.pdb -p topol.top -conc 0.15 -neutral
+gmx grompp -f em.mdp -c 5.pdb -p topol.top -o em.tpr
+gmx mdrun -v -deffnm em
+gmx energy -f em.edr -o potential.xvg #(for checking)
+gmx grompp -f nvt.mdp -c em.gro -r em.gro -p topol.top -o nvt.tpr
+gmx mdrun -deffnm nvt -v
+gmx energy -f nvt.edr -o temprature.xvg #(for checking)
+gmx grompp -f npt.mdp -c nvt.gro -t nvt.cpt -r nvt.gro -p topol.top -o npt.tpr
+gmx mdrun -deffnm npt -v
+gmx energy -f npt.edr -o pressure.xvg #(for checking)
+gmx energy -f npt.edr -o density.xvg #(for checking)
+gmx grompp -f md.mdp -c npt.gro -t npt.cpt -p topol.top -o md.tpr
+gmx mdrun -deffnm md -v
+
+PBC remove
+gmx trjconv -s md.tpr -f md.xtc -o md_whole.xtc -pbc whole (select system)
+gmx trjconv -s md.tpr -f md_whole.xtc -o md_nojump.xtc -pbc nojump (select system)
+gmx trjconv -s md.tpr -f md_nojump.xtc -o md_centered.xtc -center -pbc mol (select protein for centering and system as output)
+
+For analyzing
+gmx make_ndx -f md.gro -o chains.ndx (for indexing)
+gmx trjconv -f md_centered.xtc -s md.tpr -n water.ndx -o water.pdb -dump 0
+gmx rmsf -f md_centered.xtc -s md.tpr -n target.ndx -o rmsf.xvg -res
+gmx sasa -f md_centered.xtc -s md.tpr -n target.ndx -tu ns -o sasa.xvg
+gmx gyrate -f md_centered.xtc -s md.tpr -o rg.xvg -n target.ndx
+gmx rdf -f md_centered.xtc -s md.tpr -cn rdf.xvg -tu ns -n target.ndx
+gmx hbond -f md_centered.xtc -s md.tpr -tu ns -num hbnod.xvg 
+gmx mindist -f md_centered.xtc -s md.tpr -od mindistance.xvg -on distancenumber.xvg -tu ns -n chains.ndx
+gmx dssp -f md_centered.xtc  -s md.tpr -o SS.dat -num SS.xvg -tu ns
+gmx trjconv -s md.tpr -f md_centered.xtc -n index.ndx -o selected_group.xtc -n target.ndx
+
+For Free Energy
+mpirun -np 8 gmx_MMPBSA -O -i p-m.in -cs md.tpr -ct md_centered.xtc -ci wild.ndx -cg 17 18 -cp topol.top -cr best.pdb -o wildo.dat -eo wildeo.csv -do wilddo.dat -deo wilddeo.csv
+
+MP Rosetta Relax
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -database /home/mmg_pih/NROSETAA/rosetta_bin_ubuntu_3.14_bundle/rosetta.binary.ubuntu.release-371/main/database @relax_flags
+
+mp_ddg
+./predict_ddG.py --in_pdb my.pdb --in_span my.span --res 123 --repack_radius 8.0
+
+spaninig file
+mp_span_from_pdb.pytorchtensorflow.linuxgccrelease -database /home/mmg_pih/NROSETAA/rosetta_bin_ubuntu_3.14_bundle/rosetta.binary.ubuntu.release-371/main/database -in:file:s my.pdb
+
+relax
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -s my.pdb -parser:protocol relax.xml -ignore_unrecognized_res
+
+for probabilities 
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -s my.pdb -parser:protocol best_mutations.xml -beta -out:file:score_only best_mutations.sc
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -s my.pdb -parser:protocol current_probs.xml -out:suffix _my_probs -parser:script_vars filename=_probs.weights -overwrite
+rosetta_scripts.pytorchtensorflow.linuxgccrelease -s my.pdb -parser:protocol predict_probs.xml -out:file:score_only score.sc
+
+for flex ddg
+python run_example_2_saturation.py 
+
