@@ -4,7 +4,7 @@ rosetta_scripts.pytorchtensorflow.linuxgccrelease -s relax.pdb -parser:protocol 
 python run_example_2_saturation.py && python analyze_flex_ddG.py output_saturation
 spanfile_from_pdb.linuxgccrelease -database /path/to/db -in:file:s example_inputs/3pxo_tr.pdb
 rosetta_scripts.linuxgccrelease -database /path/to/db @relax_flags
-python predict_ddG.py --in_pdb my.pdb --in_span my.span --res 100 --repack_radius 8.0
+python predict_ddG.py --in_pdb my.pdb --in_span my.span --res 123 --repack_radius 8.0
 ----------------------
 MD run
 gmx pdb2gmx -f 1.pdb -o 2.pdb -ignh
